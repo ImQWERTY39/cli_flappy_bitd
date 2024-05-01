@@ -14,8 +14,7 @@ use crossterm::{
 
 use crate::{bird::*, pipe::*};
 
-const GRAVITY: u16 = 2;
-const WAIT_TIME: Duration = Duration::from_nanos(1_000_000_000 / 60);
+const WAIT_TIME: Duration = Duration::from_millis(25);
 
 pub fn main_loop() {
     let mut stdout = std::io::stdout();
@@ -44,9 +43,7 @@ pub fn main_loop() {
                     KeyCode::Esc => break,
                     KeyCode::Char(i) => {
                         if i == ' ' {
-                            bird.y -= 1;
-                        } else {
-                            bird.y += 1;
+                            bird.y_vel += JUMP_STRENGTH;
                         }
                     }
                     _ => (),
@@ -58,8 +55,13 @@ pub fn main_loop() {
         execute!(stdout, terminal::Clear(ClearType::All)).unwrap();
 
         draw_bird(&mut stdout, &bird);
-
         stdout.flush().unwrap();
+
+        if let Err(_) = bird.update_height(window_height) {
+            thread::sleep(Duration::from_secs(2));
+            break;
+        }
+
         thread::sleep(WAIT_TIME);
     }
 
