@@ -11,6 +11,7 @@ use crossterm::{
     style::{PrintStyledContent, Stylize},
     terminal::{self, ClearType},
 };
+use rand::Rng;
 
 use crate::{bird::*, pipe::*};
 
@@ -28,6 +29,7 @@ pub fn main_loop() {
     .unwrap();
 
     let (window_width, window_height) = crossterm::terminal::size().unwrap();
+    let mut rand = rand::thread_rng();
 
     let mut bird = Bird {
         x: BIRD_WIDTH,
@@ -52,8 +54,16 @@ pub fn main_loop() {
             }
         }
 
+        if rand.gen::<u8>() == 1 {
+            pipes.push(Pipe {
+                x: window_width,
+                gap_y: rand.gen_range(2..(window_width - PIPE_GAP_HEIGHT - 2)),
+            })
+        }
+
         execute!(stdout, terminal::Clear(ClearType::All)).unwrap();
 
+        draw_pipes(&mut stdout, &pipes, window_height);
         draw_bird(&mut stdout, &bird);
         stdout.flush().unwrap();
 
@@ -61,6 +71,8 @@ pub fn main_loop() {
             thread::sleep(Duration::from_secs(2));
             break;
         }
+
+        pipes = update_pipes(pipes);
 
         thread::sleep(WAIT_TIME);
     }
@@ -73,6 +85,35 @@ pub fn main_loop() {
     )
     .unwrap();
     crossterm::terminal::disable_raw_mode().unwrap();
+}
+
+fn update_pipes(pipes: Vec<Pipe>) -> Vec<Pipe> {
+    pipes
+        .into_iter()
+        .map(|mut x| {
+            x.x = x.x.checked_sub(PIPE_VEL).unwrap_or_default();
+            x
+        })
+        .filter(|x| x.x > 0)
+        .collect()
+}
+
+fn draw_pipes(stdout: &mut Stdout, pipes: &[Pipe], window_height: u16) {
+    pipes
+        .iter()
+        .for_each(|x| draw_pipe(stdout, x, window_height));
+}
+
+fn draw_pipe(stdout: &mut Stdout, pipe: &Pipe, window_height: u16) {
+    for i in 0..window_height {
+        // if ingap { continue }
+
+        queue!(stdout, cursor::MoveTo(pipe.x, i)).unwrap();
+
+        for _ in 0..PIPE_WIDTH {
+            queue!(stdout, PrintStyledContent(' '.on_green())).unwrap();
+        }
+    }
 }
 
 fn draw_bird(stdout: &mut Stdout, bird: &Bird) {
