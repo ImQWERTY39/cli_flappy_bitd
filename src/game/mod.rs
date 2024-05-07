@@ -8,7 +8,7 @@ use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent},
     execute, queue,
-    style::{PrintStyledContent, Stylize},
+    style::{PrintStyledContent, StyledContent, Stylize},
     terminal::{self, ClearType},
 };
 use rand::Rng;
@@ -31,6 +31,8 @@ pub fn main_loop() {
     let (window_width, window_height) = crossterm::terminal::size().unwrap();
     let mut rand = rand::thread_rng();
 
+    let mut screen = vec![vec![' '.reset(); window_width as usize]; window_height as usize];
+
     let mut bird = Bird {
         x: BIRD_WIDTH,
         y: (window_height - BIRD_HEIGHT) / 2 - 1,
@@ -39,14 +41,18 @@ pub fn main_loop() {
     let mut pipes: Vec<Pipe> = Vec::new();
 
     loop {
+        for i in screen.iter_mut() {
+            for j in i {
+                *j = ' '.reset();
+            }
+        }
+
         if event::poll(WAIT_TIME).unwrap() {
             match event::read().unwrap() {
                 Event::Key(KeyEvent { code, .. }) => match code {
                     KeyCode::Esc => break,
-                    KeyCode::Char(i) => {
-                        if i == ' ' {
-                            bird.y_vel += JUMP_STRENGTH;
-                        }
+                    KeyCode::Char(' ') => {
+                        bird.y_vel += JUMP_STRENGTH;
                     }
                     _ => (),
                 },
@@ -63,9 +69,9 @@ pub fn main_loop() {
 
         execute!(stdout, terminal::Clear(ClearType::All)).unwrap();
 
-        draw_pipes(&mut stdout, &pipes, window_height);
-        draw_bird(&mut stdout, &bird);
-        stdout.flush().unwrap();
+        draw_pipes(&mut screen, &pipes, window_height);
+        draw_bird(&mut screen, &bird);
+        draw_screen(&mut stdout, &screen);
 
         if let Err(_) = bird.update_height(window_height) {
             thread::sleep(Duration::from_secs(2));
@@ -98,30 +104,40 @@ fn update_pipes(pipes: Vec<Pipe>) -> Vec<Pipe> {
         .collect()
 }
 
-fn draw_pipes(stdout: &mut Stdout, pipes: &[Pipe], window_height: u16) {
+fn draw_pipes(screen: &mut Vec<Vec<StyledContent<char>>>, pipes: &[Pipe], window_height: u16) {
     pipes
         .iter()
-        .for_each(|x| draw_pipe(stdout, x, window_height));
+        .for_each(|x| draw_pipe(screen, x, window_height));
 }
 
-fn draw_pipe(stdout: &mut Stdout, pipe: &Pipe, window_height: u16) {
+fn draw_pipe(screen: &mut Vec<Vec<StyledContent<char>>>, pipe: &Pipe, window_height: u16) {
     for i in 0..window_height {
-        // if ingap { continue }
+        if i >= pipe.gap_y && pipe.gap_y - i < PIPE_GAP_HEIGHT {
+            continue;
+        }
 
-        queue!(stdout, cursor::MoveTo(pipe.x, i)).unwrap();
-
-        for _ in 0..PIPE_WIDTH {
-            queue!(stdout, PrintStyledContent(' '.on_green())).unwrap();
+        for j in 0..PIPE_WIDTH {
+            screen[i as usize][(pipe.x + j) as usize] = ' '.on_green();
         }
     }
 }
 
-fn draw_bird(stdout: &mut Stdout, bird: &Bird) {
+fn draw_bird(screen: &mut Vec<Vec<StyledContent<char>>>, bird: &Bird) {
     for i in 0..BIRD_HEIGHT {
-        queue!(stdout, cursor::MoveTo(bird.x, bird.y + i)).unwrap();
-
-        for _ in 0..BIRD_WIDTH {
-            queue!(stdout, PrintStyledContent(' '.on_yellow())).unwrap();
+        for j in 0..BIRD_WIDTH {
+            screen[(bird.y + i) as usize][(bird.x + j) as usize] = ' '.on_yellow();
         }
     }
+}
+
+fn draw_screen(stdout: &mut Stdout, screen: &Vec<Vec<StyledContent<char>>>) {
+    for (r, row) in screen.iter().enumerate() {
+        queue!(stdout, cursor::MoveTo(0, r as u16)).unwrap();
+
+        for chr in row {
+            queue!(stdout, PrintStyledContent(chr.clone())).unwrap();
+        }
+    }
+
+    stdout.flush().unwrap();
 }
